@@ -12,6 +12,7 @@ contract PriceFeed2 is Ownable {
 
    uint256 public SfrxETHPrice;
    address public bridge;
+   uint256 public lastUpdate = block.timestamp;
 
    mapping(uint =>  function () view returns (uint256)) funcMap;
 
@@ -52,6 +53,11 @@ contract PriceFeed2 is Ownable {
 
     function setSfrxETHprice(uint256 price) public returns (uint256) {
         require(msg.sender == bridge, "not bridge");
+        if (SfrxETHPrice > 1e18) {
+            require((price - SfrxETHPrice) <= 1e16, "increase too much");
+            require((block.timestamp - lastUpdate) >= 5 minutes, "update too soon");
+            lastUpdate = block.timestamp;
+        }
         SfrxETHPrice = price;
         return SfrxETHPrice;
     }
