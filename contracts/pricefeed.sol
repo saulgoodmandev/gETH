@@ -55,6 +55,7 @@ contract PriceFeed2 is Ownable {
         require(msg.sender == bridge, "not bridge");
         if (SfrxETHPrice > 1e18) {
             require((price - SfrxETHPrice) <= 1e16, "increase too much");
+            require((price >= 1e18), "higher than 1");
             require((block.timestamp - lastUpdate) >= 5 minutes, "update too soon");
             lastUpdate = block.timestamp;
         }
