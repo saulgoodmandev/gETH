@@ -74,6 +74,19 @@ contract gETH is ERC20("gETH", "gETH"), Ownable , ReentrancyGuard{
         uint256 amountOut = amount.mul(Oracle.getPrice(id)).div(1e18);
         return amountOut.mul(1e18).div(totalSupply());
     }
+
+    function calWeight2(address _collateral, uint256 reduceAmount) public view returns (uint256) {
+        if (totalSupply() <= 20e18) {
+            return 0;
+        }
+        uint256 amount = IERC20(_collateral).balanceOf(address(this)).sub(reduceAmount);
+        CollateralProperties memory token = CollateralMap[address(_collateral)];
+        oracle Oracle = token.priceFeed;
+        uint id = token.id;
+        uint256 amountOut = amount.mul(Oracle.getPrice(id)).div(1e18);
+        return amountOut.mul(1e18).div(totalSupply());
+    }
+
     function addCollateral(address _collateral, oracle _oracle, uint _id, uint256 _fee, uint256 _targetWeight) external onlyOwner{
         require(!isCollateral[_collateral], "added collaterals");
         require(_fee <= 1000);
@@ -106,6 +119,7 @@ contract gETH is ERC20("gETH", "gETH"), Ownable , ReentrancyGuard{
     function setCollateralMinTargetWeight(address _collateral, uint256 _weight) external onlyOwner{
         require(isCollateral[_collateral], "not added collaterals");
         require(_weight <= 1e18, " over 100%");
+        require(_weight <= CollateralMap[_collateral].TargetWeight, " higher than target");
         CollateralMap[_collateral].MinTargetWeight = _weight;
     }
 
@@ -116,16 +130,19 @@ contract gETH is ERC20("gETH", "gETH"), Ownable , ReentrancyGuard{
     }
 
     function updateBridge(address _bridge) external onlyOwner  {
+        require(_bridge != address(0), "0 address");
         bridge = _bridge;
 
     }
 
     function updateTreasury(address _treasury) external onlyOwner  {
+        require(_treasury != address(0), "0 address");
         Treasury = _treasury;
 
     }
 
     function updateStaking(address _staking) external onlyOwner  {
+        require(_staking != address(0), "0 address");
         Staking = _staking;
 
     }
@@ -193,7 +210,6 @@ contract gETH is ERC20("gETH", "gETH"), Ownable , ReentrancyGuard{
 
     function estimateMintWithCollaterals(uint256 _amount, IERC20 _token) public view returns(uint256) {
         require(isCollateral[address(_token)], "not collateral");
-        require(_token.balanceOf(msg.sender) >= _amount, "token balance too low");
         CollateralProperties memory token = CollateralMap[address(_token)];
         uint256 fee = 0;
         require(calWeight(address(_token), _amount) <= token.maxWeight, "tokens reached max weight");
@@ -211,7 +227,6 @@ contract gETH is ERC20("gETH", "gETH"), Ownable , ReentrancyGuard{
     
     function estimateRedeemWithCollaterals(uint256 _amount, IERC20 _token, bool isSwap) public view returns(uint256) {
         require(isCollateral[address(_token)], "not collateral");
-        require(balanceOf(msg.sender) >= _amount, "token balance too low");
         CollateralProperties memory token = CollateralMap[address(_token)];
         uint256 addFee = 0;
         if (calWeight(address(_token), 0) <= token.MinTargetWeight) {
@@ -237,6 +252,7 @@ contract gETH is ERC20("gETH", "gETH"), Ownable , ReentrancyGuard{
     function _mintWithCollaterals(uint256 _amount, IERC20 _token) private  returns(uint256) {
         require(isCollateral[address(_token)], "not collateral");
         require(_token.balanceOf(msg.sender) >= _amount, "token balance too low");
+        require(_amount > 0,"zero amount");
         CollateralProperties memory token = CollateralMap[address(_token)];
         uint256 fee = 0;
         require(calWeight(address(_token), _amount) <= token.maxWeight, "tokens reached max weight");
@@ -269,12 +285,13 @@ contract gETH is ERC20("gETH", "gETH"), Ownable , ReentrancyGuard{
         require(balanceOf(msg.sender) >= _amount, "token balance too low");
         CollateralProperties memory token = CollateralMap[address(_token)];
         uint256 addFee = 0;
-        if (calWeight(address(_token), 0) <= token.MinTargetWeight) {
-            addFee = 100;
-        }
+
         oracle Oracle = token.priceFeed;
         uint id = token.id;
         uint256 amountOut = _amount.mul(1e18).div(Oracle.getPrice(id));
+        if (calWeight2(address(_token), amountOut) <= token.MinTargetWeight) {
+            addFee = 100;
+        }
         uint256 feeAmount = amountOut.mul(token.fee.add(addFee)).div(100000);
         if (isSwap) {
             feeAmount = 0;
@@ -289,6 +306,7 @@ contract gETH is ERC20("gETH", "gETH"), Ownable , ReentrancyGuard{
 
     function swap(uint256 _amount, IERC20 _from, IERC20 _to) public nonReentrant returns (uint256) {
 
+       require(_from != _to, "same from and to");
        uint256 swapAmount = _mintWithCollaterals(_amount, _from);
        uint256 amountOut = _redeem(swapAmount, _to, true);
   
